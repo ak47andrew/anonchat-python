@@ -3,7 +3,7 @@ import asyncio
 import json
 from . import auth
 from . import utils
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 
 BASE_URL = "wss://anonchatapi.stivisto.com/socket.io/"
@@ -16,6 +16,7 @@ class Bot:
         self.cookie = auth_dict["cookie"]
         self.websocket = None
         self.pending_responses = {}
+        self._message_queue = asyncio.Queue()  # Queue for async iterator
 
     async def connect(self):
         """Connect to the WebSocket server."""
@@ -30,6 +31,9 @@ class Bot:
                 if message == "2":
                     await self.websocket.send("3")
                 else:
+                    # Add messages to the queue for the iterator
+                    await self._message_queue.put(message)
+                    # Handle the message internally
                     self._handle_response(message)
         except websockets.ConnectionClosed:
             print("Connection closed")
@@ -75,17 +79,14 @@ class Bot:
             await self.websocket.close()
             self.websocket = None
 
-    # async def run(self):
-    #     """Run the bot, connecting to the WebSocket server, creating an infinite loop, and disconnecting when it's closed."""
-    #     try:
-    #         await self.connect()
-    #         print("Bot connected")
-    #         future = asyncio.Future()
-    #         while not future.done():
-    #             pass
-    #     except Exception as e:
-    #         print(f"An error occurred: {e}")
-    #
-    #     finally:
-    #         await self.disconnect()
-    #         print("Bot disconnected")
+    async def __aiter__(self) -> AsyncIterator[str]:
+        """Make the Bot class an async iterator to yield incoming WebSocket messages."""
+        while self.websocket:  # Keep yielding messages while connected
+            try:
+                message = await self._message_queue.get()  # Wait for messages in the queue
+                yield message  # Yield the message to the iterator's consumer
+            except asyncio.CancelledError:
+                break  # Stop iteration if the task is cancelled
+            except Exception as e:
+                print(f"Error in async iterator: {e}")
+                break
