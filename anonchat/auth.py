@@ -28,8 +28,8 @@ def generate_data() -> dict[str, Any]:
 
     return {
         "version": config.APP_VERSION,
-        "systemLanguage": lang.split("_")[0],
-        "systemRawLanguage": lang,
+        "systemLanguage": lang.split("_")[0] if isinstance(lang, str) else "en",
+        "systemRawLanguage": lang or "en_US",
         "platform": platform.system().lower(),
         "systemInfo": platform.platform(),
         "isEmulator": False,

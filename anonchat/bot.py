@@ -25,6 +25,8 @@ class Bot:
 
     async def _listen_for_responses(self):
         """Listen for incoming messages and resolve pending responses."""
+        if self.websocket is None:
+            raise RuntimeError("WebSocket is not connected")
         try:
             async for message in self.websocket:
                 # Ping-pong handling

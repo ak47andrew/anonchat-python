@@ -9,7 +9,7 @@ def generate_uri(base_uri: str, params: dict[str, str]) -> str:
     return f"{base_uri}?{query_string}" if query_string else base_uri
 
 
-def format_ws_msg(id_: int, method: str = None, params: dict | list = None) -> str:
+def format_ws_msg(id_: int, method: Optional[str] = None, params: Optional[dict | list] = None) -> str:
     if method is None and params is None:
         return str(id_)
     elif params is None:
@@ -17,7 +17,7 @@ def format_ws_msg(id_: int, method: str = None, params: dict | list = None) -> s
     return f"{id_}[{method},{params}]"
 
 
-def choose_encoding(array: tuple[str, ...]) -> tuple[int, Optional[str], Optional[dict]]:
+def choose_encoding(array: tuple[str, ...]) -> tuple[int, Optional[str], Optional[dict | bool]]:
     encoding_id = int(array[0])
     encoding_name = array[3] if array[3] is not None else None
     encoding_params = None
