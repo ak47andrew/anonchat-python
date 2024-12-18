@@ -2,3 +2,4 @@
 !/anonchat/
 !.gitignore
 /anonchat/__pycache__
+!README.md

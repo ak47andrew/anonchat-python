@@ -1,22 +1,29 @@
+from __future__ import annotations
 import websockets
 import asyncio
 import json
 from . import auth
 from . import utils
-from typing import Optional, AsyncIterator
+from typing import Optional, AsyncIterator, overload
 
 
 BASE_URL = "wss://anonchatapi.stivisto.com/socket.io/"
 
 
 class Bot:
-    def __init__(self, auth_dict: dict[str, str]):
+    def __init__(self, auth_dict: dict[str, str], autologin: bool = True):
         params = auth.generate_data() | auth_dict
+        self.autologin = autologin
         self.uri = utils.generate_uri(BASE_URL, params)
         self.cookie = auth_dict["cookie"]
         self.websocket = None
         self.pending_responses = {}
         self._message_queue = asyncio.Queue()  # Queue for async iterator
+        self.api = self.API(self)
+
+    # Feel free to redefine it both via subclasses and attributes
+    async def on_ready_hook(self):
+        pass
 
     async def connect(self):
         """Connect to the WebSocket server."""
@@ -30,19 +37,27 @@ class Bot:
         try:
             async for message in self.websocket:
                 # Ping-pong handling
+                message = str(message)  # More of a type checking thing. kinda ugly, but okay
                 if message == "2":
                     await self.websocket.send("3")
                 else:
                     # Add messages to the queue for the iterator
                     await self._message_queue.put(message)
                     # Handle the message internally
-                    self._handle_response(message)
+                    await self._handle_response(message)
         except websockets.ConnectionClosed:
             print("Connection closed")
 
-    def _handle_response(self, message):
+    async def _handle_response(self, message: str):
         """Handle incoming messages, resolving any pending responses."""
         try:
+            if self.autologin and message.startswith("0{"):
+                await self.send_message("40")
+                return
+            if message.startswith("40{"):
+                await self.on_ready_hook()
+                if self.autologin:
+                    return
             print("Received message:", message)
             id_, name, params = utils.get_data_ws_msg(message)
             if id_ in self.pending_responses:
@@ -59,14 +74,28 @@ class Bot:
             await self.websocket.send(message)
         else:
             raise RuntimeError("WebSocket is not connected")
+    
+    @overload
+    async def send_message_with_response(self, /, message_or_id: str):
+        pass
 
-    async def send_message_with_response(self, id_: int, method: Optional[str] = None, params: Optional[dict | list] = None):
+    @overload
+    async def send_message_with_response(self, /, message_or_id: int, method: Optional[str], params: Optional[dict | list]):
+        pass
+
+    async def send_message_with_response(self, /, message_or_id: int | str, method: Optional[str] = None, params: Optional[dict | list] = None):
         """Send a message and wait for a response."""
         if not self.websocket:
             raise RuntimeError("WebSocket is not connected")
 
+        if isinstance(message_or_id, str):
+            id_ = utils.get_data_ws_msg(message_or_id)[0]
+            message = message_or_id
+        else:
+            id_ = message_or_id
+            message = utils.format_ws_msg(id_, method, params)
         recv_id = utils.generate_recv_id(id_)
-        message = utils.format_ws_msg(id_, method, params)
+
         print(f"Send: {message}")
 
         future = asyncio.Future()
@@ -92,3 +121,7 @@ class Bot:
             except Exception as e:
                 print(f"Error in async iterator: {e}")
                 break
+    
+    class API:
+        def __init__(self, outer_instance: Bot) -> None:
+            self.outer_instance = outer_instance
