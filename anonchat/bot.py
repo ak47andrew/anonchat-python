@@ -8,6 +8,7 @@ from typing import Optional, AsyncIterator, overload
 
 
 BASE_URL = "wss://anonchatapi.stivisto.com/socket.io/"
+# BASE_URL = "ws://localhost:1234"  # For debug :3
 
 
 class Bot:
@@ -36,6 +37,7 @@ class Bot:
             raise RuntimeError("WebSocket is not connected")
         try:
             async for message in self.websocket:
+                print(f"Raw message: {message}")
                 # Ping-pong handling
                 message = str(message)  # More of a type checking thing. kinda ugly, but okay
                 if message == "2":
@@ -51,6 +53,7 @@ class Bot:
     async def _handle_response(self, message: str):
         """Handle incoming messages, resolving any pending responses."""
         try:
+            print("Received message:", message)
             if self.autologin and message.startswith("0{"):
                 await self.send_message("40")
                 return
@@ -58,7 +61,6 @@ class Bot:
                 await self.on_ready_hook()
                 if self.autologin:
                     return
-            print("Received message:", message)
             id_, name, params = utils.get_data_ws_msg(message)
             if id_ in self.pending_responses:
                 future: asyncio.Future = self.pending_responses.pop(id_)
@@ -103,6 +105,15 @@ class Bot:
 
         await self.websocket.send(message)
         return await future
+
+    async def __aenter__(self):
+        """Enter the asynchronous context manager."""
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit the asynchronous context manager."""
+        await self.disconnect()
 
     async def disconnect(self):
         """Close the WebSocket connection."""
